@@ -1,0 +1,4 @@
+-- OBSOLETE. Already executed by owner under the previous shared-database plan.
+-- Do not run again. Use 003-swform-table.sql in the NEW swform database,
+-- and 004-sales-prospects.sql in the sales database instead.
+-- No old tables or columns should be dropped or repurposed.

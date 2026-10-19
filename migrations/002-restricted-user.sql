@@ -1,0 +1,3 @@
+-- OBSOLETE. Hostinger cannot provide the requested table-level grants.
+-- Do not run this file. Create a dedicated swform database and database-scoped
+-- user in Hostinger. That user must have no access to any sales database.

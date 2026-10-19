@@ -1,0 +1,15 @@
+Options -Indexes
+DirectoryIndex handler.php
+<IfModule mod_headers.c>
+Header always set Strict-Transport-Security "max-age=31536000"
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'"
+Header always set X-Content-Type-Options "nosniff"
+Header always set Referrer-Policy "no-referrer"
+Header always set X-Robots-Tag "noindex, nofollow"
+</IfModule>
+RewriteEngine On
+RewriteRule ^(?:\.git|\.env)(?:/|$|\.) - [F,L]
+RewriteRule ^(?:migrations|tests|private)(?:/|$) - [F,L]
+RewriteRule ^(?:README|BACKEND|RELEASE)\.md$ - [F,L]
+RewriteRule ^(?:api/switch-review|index\.html|switch-review/?)$ handler.php [QSA,L]
+LimitRequestBody 10240

@@ -56,7 +56,7 @@
     errors.hidden = true;
     document.querySelector('#step-count').textContent = `${step} of 5`;
     progress.setAttribute('aria-valuenow', String(step));
-    progress.firstElementChild.style.width = `${step / 6 * 100}%`;
+    progress.dataset.value = String(step);
     if (step === 5) summary();
     const heading = sections[step].querySelector('h1,h2');
     document.querySelector('#announcement').textContent = heading.textContent;

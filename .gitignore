@@ -1,0 +1,8 @@
+# Actual secrets are server-side only; these are additional accidental-commit guards.
+private/config.php
+switch-private/
+.env
+.env.*
+!.env.example
+*.log
+*.zip

@@ -1,5 +1,10 @@
 # Free Switch Review landing page
 
+**Superseded backend setup:** See README.md for the implemented PHP handler,
+the INSERT-only inbox migration and staging configuration. The sections below
+describe the original frontend handoff only, not the current implementation.
+The sales pickup/mail changes are kept outside this public repository.
+
 Public route: `/switch-review` (also `/switch-review/`). Source lives in
 `public/switch-review/`: `index.html` for copy and choices, `style.css` for layout,
 and `form.js` for progressive enhancement. The existing public assets build copies
