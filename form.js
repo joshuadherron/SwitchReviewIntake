@@ -33,9 +33,9 @@
     const concerns = values.getAll('concerns');
     if (concerns.includes('Something else') && values.get('other_concern')) concerns.push(values.get('other_concern'));
     const rows = [
-      ['Your team', values.get('staff_size') + ' people', 1],
-      ['Agreement renewal', values.get('renewal'), 2],
-      ['What could be better', concerns.join('\n') || 'No concerns selected', 3],
+      ['Current IT support', concerns.join('\n') || 'No concerns selected', 1],
+      ['Current agreement', form.querySelector('input[name=renewal]:checked')?.nextElementSibling.textContent || '', 2],
+      ['Your team', values.get('staff_size') + ' people', 3],
       ['Your details', [values.get('name'), values.get('business_name'), values.get('email'), values.get('phone')].filter(Boolean).join('\n'), 4],
     ];
     for (const [title, value, target] of rows) {
@@ -76,7 +76,10 @@
   document.querySelectorAll('[data-next]').forEach(button => button.addEventListener('click', next));
   form.addEventListener('change', event => {
     updateOther();
-    if (event.target.matches('input[type=radio]')) next();
+  });
+  // Clicking an already-selected answer after Back must advance as well.
+  form.addEventListener('click', event => {
+    if (event.target.matches('input[type=radio]') && event.target.checked) next();
   });
   form.addEventListener('submit', async event => {
     event.preventDefault();

@@ -52,10 +52,11 @@ function sr_validate(array $data): array {
     foreach (['name'=>'Name','business_name'=>'Business name','email'=>'Work email'] as $key=>$label) if (($data[$key] ?? '') === '') $errors[$key] = "$label is required.";
     if (!filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL)) $errors['email'] = 'Enter a valid work email (200 characters maximum).';
     if (!in_array($data['staff_size'] ?? '', ['1–4','5–15','16–30','31–50','50+'], true)) $errors['staff_size'] = 'Choose your team size.';
-    if (!in_array($data['renewal'] ?? '', ['Within 3 months','3–6 months','6–12 months','Not sure','No contract'], true)) $errors['renewal'] = 'Choose your renewal window.';
+    if (!in_array($data['renewal'] ?? '', ['Within 3 months','3–6 months','6–12 months','Not sure','No contract','leave_early','over_12_months','month_to_month'], true)) $errors['renewal'] = 'Choose your current IT contract situation.';
     $allowed = ['Slow response','Problems keep coming back','Too expensive','Security worries',"Can't get our own passwords/accounts",'Something else'];
+    $allowed = array_merge($allowed,['Slow response or unreliable support','Costs are too high','Security or data protection concerns',"We don't have control of our own accounts",'Just exploring other options']);
     $concerns = $data['concerns'] ?? [];
-    if (!is_array($concerns) || count($concerns)>6 || array_filter($concerns, fn($v)=>!is_string($v) || !in_array($v,$allowed,true))) $errors['concerns'] = 'Choose valid concerns.';
+    if (!is_array($concerns) || count($concerns)>7 || array_filter($concerns, fn($v)=>!is_string($v) || !in_array($v,$allowed,true))) $errors['concerns'] = 'Choose valid concerns.';
     else $data['concerns'] = array_values(array_unique($concerns));
     if (($data['consent'] ?? '') !== 'yes') $errors['consent'] = 'Please agree to be contacted about your review.';
     if (!is_array($data['concerns'] ?? null) || !in_array('Something else', $data['concerns'], true)) $data['other_concern'] = '';
@@ -85,7 +86,7 @@ function sr_render(array $values=[], array $errors=[], bool $success=false): str
     $html = file_get_contents(__DIR__ . '/index.html');
     if ($html === false) throw new RuntimeException('template');
     // POST fallback is served under /api/: assets must resolve from the site root.
-    $html=str_replace(['href="./style.css"','src="./form.js"','href="./favicon.svg"'],['href="/style.css"','src="/form.js"','href="/favicon.svg"'],$html);
+    $html=str_replace(['href="./style.css"','src="./form.js','href="./favicon.svg"'],['href="/style.css"','src="/form.js','href="/favicon.svg"'],$html);
     foreach ($values as $name=>$value) {
         if ($name==='concerns' && is_array($value)) {
             foreach ($value as $choice) $html=preg_replace_callback('/<input\b[^>]*name="concerns"[^>]*>/',fn($m)=>str_contains($m[0],'value="'.sr_escape((string)$choice).'"')?substr($m[0],0,-1).' checked>':$m[0],$html);
@@ -105,12 +106,12 @@ function sr_render(array $values=[], array $errors=[], bool $success=false): str
         $html=preg_replace('/<p id="errors"[^>]*>.*?<\/p>/s','<p id="errors" class="errors" role="alert" tabindex="-1">'.sr_escape($message).'</p>',$html);
         // Validation response remains a plain usable form, including for JS clients
         // that happen to navigate with a normal POST.
-        $html=str_replace('<script src="/form.js" defer></script>','',$html);
+        $html=preg_replace('~<script src="/form.js[^\"]*" defer></script>~','',$html);
     }
     if ($success) {
         $html=preg_replace('/<form\b.*?<\/form>/s','',$html);
         $html=str_replace('data-step="6" hidden','data-step="6"',$html);
-        $html=str_replace('<script src="/form.js" defer></script>','',$html);
+        $html=preg_replace('~<script src="/form.js[^\"]*" defer></script>~','',$html);
     }
     return $html;
 }

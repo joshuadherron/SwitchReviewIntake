@@ -23,7 +23,7 @@ try {
 }finally{foreach(glob($rate.'/*.json') as $file) unlink($file);rmdir($rate);}
 $html=sr_render($valid,['name'=>'Fix name']);
 check(str_contains($html,'value="Alex"') && str_contains($html,'value="facebook"'),'no-JS preserves values');
-check(str_contains($html,'value="Slow response" checked') && str_contains($html,'>Details</textarea>'),'no-JS preserves choices');
+check(str_contains($html,'>Details</textarea>'),'no-JS preserves context');
 check(!str_contains($html,'<script ') && str_contains($html,'action="/api/switch-review"'),'no-JS validation rerender');
 check(str_contains($html,'href="/style.css"'),'POST response assets');
 check(!str_contains(sr_render([],[],true),'<form') && str_contains(sr_render([],[],true),'data-step="6">'),'no-JS confirmation');
@@ -39,6 +39,13 @@ class TestPDO extends PDO {
     public function prepare(string $query,array $options=[]): PDOStatement|false { $this->sql=$query;return $this->statement; }
 }
 $pdo=new TestPDO();sr_insert($pdo,$valid);
+foreach(['leave_early','over_12_months','month_to_month'] as $agreement) {
+    $new=$base;$new['renewal']=$agreement;$new['concerns']=['Slow response or unreliable support','Costs are too high','Something else'];
+    [$new,$newErrors]=sr_validate($new);check(!$newErrors,'new agreements validate');
+    sr_insert($pdo,$new);check($pdo->statement->args[6]===$agreement && json_decode($pdo->statement->args[7],true)===$new['concerns'],'new exact answers saved');
+    check(str_contains(sr_render($new,['name'=>'Required']),'value="Slow response or unreliable support" checked'),'new choices restored on no-JS error');
+}
+sr_insert($pdo,$valid);
 check(str_starts_with($pdo->sql,'INSERT INTO switch_review_leads') && !str_contains($pdo->sql,'SELECT'),'INSERT only');
 check(in_array('facebook',$pdo->statement->args,true),'insert UTM');
 check(!str_contains($pdo->sql,'Alex') && in_array('Alex',$pdo->statement->args,true),'prepared parameters');
