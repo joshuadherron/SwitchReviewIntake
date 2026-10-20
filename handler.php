@@ -42,6 +42,7 @@ function sr_parse(string $body): array {
 }
 function sr_validate(array $data): array {
     $errors = [];
+    $v2 = ($data['form_version'] ?? '') === '2';
     $limits = ['name'=>120,'business_name'=>160,'email'=>200,'phone'=>40,'other_concern'=>300,'utm_source'=>2000,'utm_medium'=>2000,'utm_campaign'=>2000,'utm_content'=>2000,'fbclid'=>2000];
     foreach ($limits as $key=>$max) {
         $value = $data[$key] ?? '';
@@ -51,14 +52,18 @@ function sr_validate(array $data): array {
     }
     foreach (['name'=>'Name','business_name'=>'Business name','email'=>'Work email'] as $key=>$label) if (($data[$key] ?? '') === '') $errors[$key] = "$label is required.";
     if (!filter_var($data['email'] ?? '', FILTER_VALIDATE_EMAIL)) $errors['email'] = 'Enter a valid work email (200 characters maximum).';
-    if (!in_array($data['staff_size'] ?? '', ['1–4','5–15','16–30','31–50','50+'], true)) $errors['staff_size'] = 'Choose your team size.';
-    if (!in_array($data['renewal'] ?? '', ['Within 3 months','3–6 months','6–12 months','Not sure','No contract'], true)) $errors['renewal'] = 'Choose your renewal window.';
+    if ($v2 && ($data['phone'] ?? '') === '') $errors['phone'] = 'Phone number is required.';
+    if ($v2 && !preg_match('/^[+()0-9.\s-]{7,40}$/D', $data['phone'] ?? '')) $errors['phone'] = 'Enter a valid phone number.';
+    if (!in_array($data['staff_size'] ?? '', $v2 ? ['1–4','5–15','16–30','31–50','51+'] : ['1–4','5–15','16–30','31–50','50+'], true)) $errors['staff_size'] = 'Choose your team size.';
+    if (!in_array($data['renewal'] ?? '', $v2 ? ['leave_early','ending_soon','month_to_month','no_contract','unsure'] : ['Within 3 months','3–6 months','6–12 months','Not sure','No contract'], true)) $errors['renewal'] = 'Choose your current agreement status.';
     $allowed = ['Slow response','Problems keep coming back','Too expensive','Security worries',"Can't get our own passwords/accounts",'Something else'];
     $concerns = $data['concerns'] ?? [];
+    if ($v2) $allowed = ['Slow or unreliable support',"Recurring IT problems that aren't getting fixed",'Concerned about security or data protection','Costs keep increasing','Unhappy with our current provider overall','Just exploring other options'];
+    if ($v2 && (!is_array($concerns) || count($concerns) !== 1)) $errors['concerns'] = 'Choose one reason for considering a switch.';
     if (!is_array($concerns) || count($concerns)>6 || array_filter($concerns, fn($v)=>!is_string($v) || !in_array($v,$allowed,true))) $errors['concerns'] = 'Choose valid concerns.';
     else $data['concerns'] = array_values(array_unique($concerns));
     if (($data['consent'] ?? '') !== 'yes') $errors['consent'] = 'Please agree to be contacted about your review.';
-    if (!is_array($data['concerns'] ?? null) || !in_array('Something else', $data['concerns'], true)) $data['other_concern'] = '';
+    if (!$v2 && (!is_array($data['concerns'] ?? null) || !in_array('Something else', $data['concerns'], true))) $data['other_concern'] = '';
     return [$data, $errors];
 }
 function sr_rate(string $directory, string $secret, string $ip, int $now): bool {
@@ -85,7 +90,7 @@ function sr_render(array $values=[], array $errors=[], bool $success=false): str
     $html = file_get_contents(__DIR__ . '/index.html');
     if ($html === false) throw new RuntimeException('template');
     // POST fallback is served under /api/: assets must resolve from the site root.
-    $html=str_replace(['href="./style.css"','src="./form.js"','href="./favicon.svg"'],['href="/style.css"','src="/form.js"','href="/favicon.svg"'],$html);
+    $html=str_replace(['href="./style.css','src="./form.js','href="./favicon.svg"'],['href="/style.css','src="/form.js','href="/favicon.svg"'],$html);
     foreach ($values as $name=>$value) {
         if ($name==='concerns' && is_array($value)) {
             foreach ($value as $choice) $html=preg_replace_callback('/<input\b[^>]*name="concerns"[^>]*>/',fn($m)=>str_contains($m[0],'value="'.sr_escape((string)$choice).'"')?substr($m[0],0,-1).' checked>':$m[0],$html);
@@ -101,16 +106,23 @@ function sr_render(array $values=[], array $errors=[], bool $success=false): str
         if ($name==='other_concern') $html=preg_replace_callback('/(<textarea\b[^>]*name="other_concern"[^>]*>).*?(<\/textarea>)/s',fn($m)=>$m[1].sr_escape($value).$m[2],$html);
     }
     if ($errors) {
+        // A visitor may submit a cached pre-v2 form. Keep its original answers visible
+        // when the current template cannot represent those legacy radio choices.
+        if (($values['form_version'] ?? '') !== '2') {
+            $legacy = ['Previous team size: '.($values['staff_size'] ?? ''), 'Previous renewal: '.($values['renewal'] ?? '')];
+            foreach (($values['concerns'] ?? []) as $choice) $legacy[] = 'Previous concern: '.$choice;
+            $html=str_replace('<form action=', '<p class="helper">'.sr_escape(implode(' | ',$legacy)).'</p><form action=', $html);
+        }
         $message=implode(' ',array_values($errors));
         $html=preg_replace('/<p id="errors"[^>]*>.*?<\/p>/s','<p id="errors" class="errors" role="alert" tabindex="-1">'.sr_escape($message).'</p>',$html);
         // Validation response remains a plain usable form, including for JS clients
         // that happen to navigate with a normal POST.
-        $html=str_replace('<script src="/form.js" defer></script>','',$html);
+        $html=preg_replace('~<script src="/form.js[^\"]*" defer></script>~','',$html);
     }
     if ($success) {
         $html=preg_replace('/<form\b.*?<\/form>/s','',$html);
         $html=str_replace('data-step="6" hidden','data-step="6"',$html);
-        $html=str_replace('<script src="/form.js" defer></script>','',$html);
+        $html=preg_replace('~<script src="/form.js[^\"]*" defer></script>~','',$html);
     }
     return $html;
 }
@@ -124,7 +136,7 @@ function sr_insert(PDO $pdo, array $v): void {
     $uuid = bin2hex(random_bytes(16));
     $id=substr($uuid,0,8).'-'.substr($uuid,8,4).'-4'.substr($uuid,13,3).'-a'.substr($uuid,17,3).'-'.substr($uuid,20,12);
     $columns=['id','contact_name','business_name','email','phone','employee_range','renewal_window','concerns','other_concern','outside_target_size','utm_source','utm_medium','utm_campaign','utm_content','fbclid'];
-    $args=[$id,$v['name'],$v['business_name'],$v['email'],$v['phone']?:null,$v['staff_size'],$v['renewal'],json_encode($v['concerns'],JSON_THROW_ON_ERROR),$v['other_concern']?:null,in_array($v['staff_size'],['1–4','50+'],true)?1:0];
+    $args=[$id,$v['name'],$v['business_name'],$v['email'],$v['phone']?:null,$v['staff_size'],$v['renewal'],json_encode($v['concerns'],JSON_THROW_ON_ERROR),$v['other_concern']?:null,in_array($v['staff_size'],['1–4','50+','51+'],true)?1:0];
     foreach (['utm_source','utm_medium','utm_campaign','utm_content','fbclid'] as $key) $args[]=$v[$key]?:null;
     $sql='INSERT INTO switch_review_leads ('.implode(',',$columns).",consent_at,created_at,status) VALUES (".implode(',',array_fill(0,count($columns),'?')).",UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),'new')";
     $pdo->prepare($sql)->execute($args); // No SELECT, lastInsertId lookup, or schema probes.

@@ -23,9 +23,9 @@ try {
 }finally{foreach(glob($rate.'/*.json') as $file) unlink($file);rmdir($rate);}
 $html=sr_render($valid,['name'=>'Fix name']);
 check(str_contains($html,'value="Alex"') && str_contains($html,'value="facebook"'),'no-JS preserves values');
-check(str_contains($html,'value="Slow response" checked') && str_contains($html,'>Details</textarea>'),'no-JS preserves choices');
+check(str_contains($html,'>Details</textarea>'),'no-JS preserves context');
 check(!str_contains($html,'<script ') && str_contains($html,'action="/api/switch-review"'),'no-JS validation rerender');
-check(str_contains($html,'href="/style.css"'),'POST response assets');
+check(str_contains($html,'href="/style.css?v=2"'),'POST response assets');
 check(!str_contains(sr_render([],[],true),'<form') && str_contains(sr_render([],[],true),'data-step="6">'),'no-JS confirmation');
 $attack=$valid;$attack['name']='"><img src=x onerror=alert(1)>';
 check(!str_contains(sr_render($attack),'<img src=x'),'HTML escape');
@@ -38,7 +38,14 @@ class TestPDO extends PDO {
     public function __construct(){ $this->statement=new TestStatement(); }
     public function prepare(string $query,array $options=[]): PDOStatement|false { $this->sql=$query;return $this->statement; }
 }
-$pdo=new TestPDO();sr_insert($pdo,$valid);
+$v2=array_merge($base,['form_version'=>'2','phone'=>'409-937-2798','staff_size'=>'51+','renewal'=>'leave_early','concerns'=>['Slow or unreliable support'],'other_concern'=>'Agreement ends next year.']);
+[$new,$newErrors]=sr_validate($v2);check(!$newErrors,'v2 valid');
+foreach(['phone','concerns','renewal','staff_size'] as $field) {$bad=$v2;unset($bad[$field]);check(isset(sr_validate($bad)[1][$field]),'v2 required '.$field);}
+$bad=$v2;$bad['concerns'][]='Costs keep increasing';check(isset(sr_validate($bad)[1]['concerns']),'v2 single choice');
+foreach(['leave_early','ending_soon','month_to_month','no_contract','unsure'] as $agreement){$bad=$v2;$bad['renewal']=$agreement;check(!sr_validate($bad)[1],'v2 agreement choices');}
+$newHtml=sr_render($new,['phone'=>'Fix phone']);check(str_contains($newHtml,'value="leave_early" required checked') && str_contains($newHtml,'>Agreement ends next year.</textarea>'),'v2 fallback preserves answers');
+$pdo=new TestPDO();sr_insert($pdo,$new);check($pdo->statement->args[6]==='leave_early' && $pdo->statement->args[8]==='Agreement ends next year.' && $pdo->statement->args[9]===1,'v2 answers and size saved');
+sr_insert($pdo,$valid);
 check(str_starts_with($pdo->sql,'INSERT INTO switch_review_leads') && !str_contains($pdo->sql,'SELECT'),'INSERT only');
 check(in_array('facebook',$pdo->statement->args,true),'insert UTM');
 check(!str_contains($pdo->sql,'Alex') && in_array('Alex',$pdo->statement->args,true),'prepared parameters');
