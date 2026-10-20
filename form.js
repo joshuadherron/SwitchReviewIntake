@@ -13,24 +13,51 @@
     form.elements.namedItem(key).value = (params.get(key) || '').slice(0, 2000);
   }
   let step = 1;
+  let editing = false;
   let submitting = false;
   document.body.classList.add('enhanced');
   form.noValidate = true;
   const data = () => new FormData(form);
+  const other = document.querySelector('#other-field');
+  const updateOther = () => { other.hidden = !data().getAll('concerns').includes('Something else'); };
+  updateOther();
   function showError(message) {
     errors.textContent = message;
     errors.hidden = false;
     errors.focus();
   }
+  function summary() {
+    const values = data();
+    const root = document.querySelector('#summary');
+    root.replaceChildren();
+    const concerns = values.getAll('concerns');
+    if (concerns.includes('Something else') && values.get('other_concern')) concerns.push(values.get('other_concern'));
+    const rows = [
+      ['Your team', values.get('staff_size') + ' people', 1],
+      ['Agreement renewal', values.get('renewal'), 2],
+      ['What could be better', concerns.join('\n') || 'No concerns selected', 3],
+      ['Your details', [values.get('name'), values.get('business_name'), values.get('email'), values.get('phone')].filter(Boolean).join('\n'), 4],
+    ];
+    for (const [title, value, target] of rows) {
+      const row = document.createElement('div'); row.className = 'summary-row';
+      const heading = document.createElement('b'); heading.textContent = title;
+      const text = document.createElement('p'); text.textContent = value;
+      const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'Edit';
+      edit.setAttribute('aria-label', 'Edit ' + title.toLowerCase());
+      edit.addEventListener('click', () => { editing = true; show(target); });
+      row.append(heading, text, edit); root.append(row);
+    }
+  }
   function show(next, focus = true) {
     step = next;
-    sections.forEach(section => { section.hidden = Number(section.dataset.step) !== step; });
+    sections.forEach((section, i) => { section.hidden = i !== step; });
     nav.hidden = step === 0 || step === 6;
     document.querySelector('#back').hidden = step <= 1;
     errors.hidden = true;
     document.querySelector('#step-count').textContent = `${step} of 5`;
-    progress.setAttribute('aria-valuenow', String(Math.min(step, 5)));
+    progress.setAttribute('aria-valuenow', String(step));
     progress.dataset.value = String(step);
+    if (step === 5) summary();
     const heading = sections[step].querySelector('h1,h2');
     document.querySelector('#announcement').textContent = heading.textContent;
     if (focus) { heading.focus({ preventScroll: true }); window.scrollTo({ top: 0, behavior: 'instant' }); }
@@ -43,15 +70,19 @@
   }
   function next() {
     if (!valid(step)) return;
-    show(Math.min(5, step + 1));
+    if (editing) { editing = false; show(5); } else show(step + 1);
   }
-  document.querySelector('#back').addEventListener('click', () => { show(Math.max(1, step - 1)); });
+  document.querySelector('#back').addEventListener('click', () => { editing = false; show(Math.max(1, step - 1)); });
   document.querySelectorAll('[data-next]').forEach(button => button.addEventListener('click', next));
+  form.addEventListener('change', event => {
+    updateOther();
+    if (event.target.matches('input[type=radio]')) next();
+  });
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (submitting) return;
     if (step !== 5) { next(); return; }
-    for (let i = 1; i <= 5; i++) if (!valid(i)) return;
+    for (let i = 1; i <= 4; i++) if (!valid(i)) return;
     submitting = true;
     const button = form.querySelector('[type=submit]');
     button.disabled = true; button.textContent = 'Sending…';
